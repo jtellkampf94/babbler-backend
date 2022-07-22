@@ -1,3 +1,4 @@
+const dotenv = require("dotenv");
 const jwt = require("jsonwebtoken");
 
 const User = require("../models/user.model");
@@ -6,7 +7,8 @@ const updateUserValidation = require("../validation/updateUserValidation");
 const formatErrorMessage = require("../helpers/formatErrorMessage");
 const dbErrorHandler = require("../helpers/dbErrorHandler");
 const s3Helpers = require("../helpers/amazonS3Helpers");
-const keys = require("../config/keys");
+
+dotenv.config();
 
 exports.createUser = async (req, res, next) => {
   const data = { ...req.body };
@@ -21,11 +23,11 @@ exports.createUser = async (req, res, next) => {
 
     try {
       const users = await User.find({
-        $or: [{ username: data.username }, { email: data.email }]
+        $or: [{ username: data.username }, { email: data.email }],
       });
 
       if (users.length > 0) {
-        let errorArray = users.map(user => {
+        let errorArray = users.map((user) => {
           if (user.email === data.email) {
             return { email: "Email already taken" };
           }
@@ -35,7 +37,7 @@ exports.createUser = async (req, res, next) => {
         });
 
         let errors = {};
-        errorArray.forEach(error => Object.assign(errors, error));
+        errorArray.forEach((error) => Object.assign(errors, error));
 
         return res.status(422).json(errors);
       }
@@ -66,7 +68,7 @@ exports.createUser = async (req, res, next) => {
       delete userDetails.salt;
       delete userDetails.hashedPassword;
       userDetails.expiresAt = Date.now + 24 * 60 * 60 * 1000;
-      const token = jwt.sign(userDetails, keys.jwtSecretKey);
+      const token = jwt.sign(userDetails, process.env.JWT_SECRET_KEY);
 
       return res.status(200).json({ token });
     } catch (err) {
@@ -88,13 +90,13 @@ exports.userByID = async (req, res, next, id) => {
 
     if (!user)
       return res.status(404).json({
-        error: "User not found"
+        error: "User not found",
       });
     req.profile = user;
     next();
   } catch (err) {
     return res.status(404).json({
-      error: "Could not retrieve user"
+      error: "Could not retrieve user",
     });
   }
 };
@@ -144,7 +146,7 @@ exports.updateUser = async (req, res, next) => {
 
       if (!user.authenticate(data.currentPassword)) {
         return res.status(422).send({
-          currentPassword: "Password incorrect"
+          currentPassword: "Password incorrect",
         });
       }
 
@@ -158,18 +160,24 @@ exports.updateUser = async (req, res, next) => {
     if (data.profilePictureUrl && user.profilePictureUrl) {
       const startingIndex = user.profilePictureUrl.indexOf(".com/") + 5;
       const imageKey = user.profilePictureUrl.slice(startingIndex);
-      await s3Helpers.deleteImageFromS3(keys.amazonS3BucketName, imageKey);
+      await s3Helpers.deleteImageFromS3(
+        process.env.AMAZON_S3_BUCKET_NAME,
+        imageKey
+      );
     }
 
     if (data.headerImageUrl && user.headerImageUrl) {
       const startingIndex = user.headerImageUrl.indexOf(".com/") + 5;
       const imageKey = user.headerImageUrl.slice(startingIndex);
-      await s3Helpers.deleteImageFromS3(keys.amazonS3BucketName, imageKey);
+      await s3Helpers.deleteImageFromS3(
+        process.env.AMAZON_S3_BUCKET_NAME,
+        imageKey
+      );
     }
 
     //5. updateUser and save
     const fields = Object.keys(data);
-    fields.forEach(field => {
+    fields.forEach((field) => {
       user[field] = data[field];
     });
 
@@ -179,7 +187,7 @@ exports.updateUser = async (req, res, next) => {
     delete userDetails.salt;
     delete userDetails.hashedPassword;
     userDetails.expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-    const token = jwt.sign(userDetails, keys.jwtSecretKey);
+    const token = jwt.sign(userDetails, process.env.JWT_SECRET_KEY);
 
     return res.status(200).json({ token });
   } catch (error) {
@@ -198,12 +206,12 @@ exports.deleteUser = async (req, res, next) => {
     // delete images of user on s3 if user has directory in bucket
     const directoryExists = await s3Helpers.isDirectoryInS3Bucket(
       user._id.toString(),
-      keys.amazonS3BucketName
+      process.env.AMAZON_S3_BUCKET_NAME
     );
 
     if (directoryExists) {
       await s3Helpers.deleteDirectoryFromS3Bucket(
-        keys.amazonS3BucketName,
+        process.env.AMAZON_S3_BUCKET_NAME,
         user._id.toString()
       );
     }
@@ -242,11 +250,11 @@ exports.getUsers = async (req, res, next) => {
 exports.followUser = async (req, res, next) => {
   try {
     await User.findByIdAndUpdate(req.user._id, {
-      $push: { following: req.body.userId }
+      $push: { following: req.body.userId },
     });
 
     await User.findByIdAndUpdate(req.body.userId, {
-      $push: { followers: req.user._id }
+      $push: { followers: req.user._id },
     });
     const following = await User.findById(req.body.userId)
       .populate("following", "_id name username profilePictureUrl followers")
@@ -257,16 +265,18 @@ exports.followUser = async (req, res, next) => {
       .populate("followers", "_id name username profilePictureUrl followers");
 
     const followerObj = { ...follower.toObject() };
-    const followersMapped = followerObj.followers.map(follower => follower._id);
+    const followersMapped = followerObj.followers.map(
+      (follower) => follower._id
+    );
     const followingMapped = followerObj.following.map(
-      following => following._id
+      (following) => following._id
     );
     followerObj.followers = followersMapped;
     followerObj.following = followingMapped;
     delete followerObj.hashedPassword;
     delete followerObj.salt;
     followerObj.expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-    const token = jwt.sign(followerObj, keys.jwtSecretKey);
+    const token = jwt.sign(followerObj, process.env.JWT_SECRET_KEY);
 
     const followerRes = { ...follower.toObject() };
     delete followerRes.hashedPassword;
@@ -288,11 +298,11 @@ exports.followUser = async (req, res, next) => {
 exports.unfollowUser = async (req, res, next) => {
   try {
     await User.findByIdAndUpdate(req.user._id, {
-      $pull: { following: req.body.userId }
+      $pull: { following: req.body.userId },
     });
 
     await User.findByIdAndUpdate(req.body.userId, {
-      $pull: { followers: req.user._id }
+      $pull: { followers: req.user._id },
     });
     const unfollowing = await User.findById(req.body.userId)
       .populate("following", "_id name username profilePictureUrl followers")
@@ -303,14 +313,14 @@ exports.unfollowUser = async (req, res, next) => {
       .populate("followers", "_id name username profilePictureUrl followers");
 
     const unfollowerObj = { ...unfollower.toObject() };
-    const followers = unfollowerObj.followers.map(follower => follower._id);
-    const following = unfollowerObj.following.map(following => following._id);
+    const followers = unfollowerObj.followers.map((follower) => follower._id);
+    const following = unfollowerObj.following.map((following) => following._id);
     unfollowerObj.followers = followers;
     unfollowerObj.following = following;
     delete unfollowerObj.hashedPassword;
     delete unfollowerObj.salt;
     unfollowerObj.expiresAt = Date.now() + 24 * 60 * 60 * 1000;
-    const token = jwt.sign(unfollowerObj, keys.jwtSecretKey);
+    const token = jwt.sign(unfollowerObj, process.env.JWT_SECRET_KEY);
 
     const unfollowerRes = { ...unfollower.toObject() };
     delete unfollowerRes.hashedPassword;

@@ -3,7 +3,9 @@ const createPostValidation = require("../validation/createPostValidation");
 const formatErrorMessage = require("../helpers/formatErrorMessage");
 const getErrorMessage = require("../helpers/dbErrorHandler");
 const { deleteImageFromS3 } = require("../helpers/amazonS3Helpers");
-const keys = require("../config/keys");
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 exports.postByID = async (req, res, next, id) => {
   try {
@@ -12,13 +14,13 @@ exports.postByID = async (req, res, next, id) => {
       .populate("comments.postedBy", "_id name username profilePictureUrl");
     if (!post)
       return res.status(401).json({
-        error: "Post not found"
+        error: "Post not found",
       });
     req.post = post;
     next();
   } catch (err) {
     return res.status(400).json({
-      error: "Could not retrieve use post"
+      error: "Could not retrieve use post",
     });
   }
 };
@@ -79,7 +81,7 @@ exports.likePost = async (req, res, next) => {
     const { message, changeErrCode } = getErrorMessage(err);
     const code = changeErrCode ? 500 : 400;
     return res.status(code).json({
-      error: message
+      error: message,
     });
   }
 };
@@ -92,7 +94,7 @@ exports.deletePost = async (req, res, next) => {
 
   if (!isPoster) {
     return res.status(403).json({
-      error: "Unauthorized"
+      error: "Unauthorized",
     });
   }
 
@@ -101,7 +103,7 @@ exports.deletePost = async (req, res, next) => {
     if (post.imageUrl) {
       const startingIndex = post.imageUrl.indexOf(".com/") + 5;
       const imageKey = post.imageUrl.slice(startingIndex);
-      deleteImageFromS3(keys.amazonS3BucketName, imageKey);
+      deleteImageFromS3(process.env.AMAZON_S3_BUCKET_NAME, imageKey);
     }
     const deletedPost = post.remove();
     res.status(200).json(deletedPost);
@@ -109,7 +111,7 @@ exports.deletePost = async (req, res, next) => {
     const { message, changeErrCode } = getErrorMessage(err);
     const code = changeErrCode ? 500 : 400;
     return res.status(code).json({
-      error: message
+      error: message,
     });
   }
 };
@@ -126,7 +128,7 @@ exports.unlikePost = async (req, res) => {
     const { message, changeErrCode } = getErrorMessage(err);
     const code = changeErrCode ? 500 : 400;
     return res.status(code).json({
-      error: message
+      error: message,
     });
   }
 };
@@ -149,7 +151,7 @@ exports.comment = async (req, res, next) => {
     const { message, changeErrCode } = getErrorMessage(err);
     const code = changeErrCode ? 500 : 400;
     return res.status(code).json({
-      error: message
+      error: message,
     });
   }
 };
@@ -170,7 +172,7 @@ exports.uncomment = async (req, res) => {
     const { message, changeErrCode } = getErrorMessage(err);
     const code = changeErrCode ? 500 : 400;
     return res.status(code).json({
-      error: message
+      error: message,
     });
   }
 };
